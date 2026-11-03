@@ -17,7 +17,7 @@ import os
 
 from sqlalchemy import create_engine, Integer, Column, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 
 DATABASE_URL = "sqlite:///./livros.db"
 
@@ -72,29 +72,24 @@ def sessao_db():
         yield db
     finally:
         db.close
+    
 @app.get("/livros")
-def get_livros( page: int = 1, limit: int = 10, credentials: HTTPBasicCredentials= Depends(autenticar_usuario)):
+def get_livros( page: int = 1, limit: int = 10, db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials= Depends(autenticar_usuario)):
    if page < 1 or limit <1: 
        raise HTTPException(status_code=400, detail="Page ou limit inválidos!")
-   if not meus_livros:
+
+   livros = db.query(LivroDB).offset((page-1)*limit).limit(limit).all() #pega dados na paginação correta
+   
+   if not livros:
     return {"message": "Não existe nenhum livro!"}
 
-   livros_ordenados= sorted(meus_livros.items(),key=lambda x: x[0])
-
-   start = (page -1) * limit
-   end = start + limit
-
-   livros_paginados=[
-       {
-           "id": id, "nome":livro_data["nome"], "autor":livro_data["autor"], "ano":livro_data["ano"]
-       }
-       for id, livro_data in livros_ordenados[start:end]
-   ]
+   total = db.query(LivroDB).count()
+   livro_array = [{"id": livro.id, "nome": livro.nome, "autor": livro.autor, "ano" : livro.ano} for livro in livros]
    return{
        "page": page,
        "limit": limit,
-       "total":len(meus_livros),
-       "livros": livros_paginados
+       "total": total,
+       "livros":  livro_array
    }
 
 # id, nome, autor, ano de lançamento
