@@ -62,7 +62,7 @@ class LivroDB(Base):
 class Livro(BaseModel):
     nome: str
     autor: str
-    ano: str 
+    ano: int 
 
 Base.metadata.create_all(bind = engine)
 
@@ -94,26 +94,39 @@ def get_livros( page: int = 1, limit: int = 10, db: Session = Depends(sessao_db)
 
 # id, nome, autor, ano de lançamento
 @app.post("/adicionar")
-def post_livros(id: int, livro: Livro, credentials: HTTPBasicCredentials = Depends(security)):
-    if id in meus_livros:
-        raise HTTPException(status_code=400, detail="Esse livro já existe.")
-    else:
-        meus_livros[id]=livro.model_dump()
-        return {"message": "Livro criado com sucesso!"}
+def post_livros( livro: Livro,db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(security)):
+    db_livro = db.query(LivroDB).filter(LivroDB.nome==livro.nome, LivroDB.autor == livro.autor).first()
+    if db_livro:
+        raise HTTPException(status_code=400, detail="Esse livro já existe no banco de dados.")
+
+    novo_livro = LivroDB(nome = livro.nome, autor = livro.autor, ano = livro.ano) 
+    db.add(novo_livro)
+    db.commit()
+    db.refresh(novo_livro)
+
+    return {"message" : "Livro adicionado com sucesso!"}
 
 @app.put("/atualizar/{id}")
-def put_livros(id: int, livro: Livro, credentials: HTTPBasicCredentials = Depends(security)):
-    meu_livro=meus_livros.get(id)
-    if not meu_livro:
-        raise HTTPException(status_code=404, detail="Esse livro não existe.")
-    else:
-        meus_livros[id]=livro.model_dump() 
-        return {"message": "Informações atualizadas com sucesso"}
+def put_livros(id: int, livro: Livro,db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(security)):
+    db_livro = db.query(LivroDB).filter(LivroDB.id==id).first()
+    if not db_livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado no banco de dados.")
+
+    db_livro.nome = livro.nome
+    db_livro.autor = livro.autor
+    db_livro.ano = livro.ano
+
+    db.commit()
+    db.refresh(db_livro)
+
+    return {"message" : "Livro atualizado com sucesso!"}
 
 @app.delete("/deletar/{id}")
-def delete_livro(id: int, credentials: HTTPBasicCredentials = Depends(security)):
-    if id not in meus_livros:
-         raise HTTPException(status_code=404, detail="Esse livro não existe.")
-    else:
-        del meus_livros[id]
-        return {"message": "Livro deletado com sucesso"}
+def delete_livro(id: int,db: Session = Depends(sessao_db), credentials: HTTPBasicCredentials = Depends(security)):
+    db_livro = db.query(LivroDB).filter(LivroDB.id==id).first()
+    if not db_livro:
+        raise HTTPException(status_code=404, detail="Livro não encontrado no banco de dados.")
+
+    db.delete(db_livro)
+    db.commit()
+    return {"message": "Livro deletado com sucesso!"}
